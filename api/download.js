@@ -1,5 +1,3 @@
-const ytdl = require('@distube/ytdl-core');
-
 export default async function handler(req, res) {
     // CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,49 +10,51 @@ export default async function handler(req, res) {
     }
 
     try {
-        const videoUrl = `https://www.youtube.com/watch?v=${video_id}`;
+        const ytUrl = `https://www.youtube.com/watch?v=${video_id}`;
         
-        // ytdl-core ko use karke video ki details fetch karna
-        const info = await ytdl.getInfo(videoUrl);
-
-        // Title aur highest quality Thumbnail nikalna
-        const title = info.videoDetails.title;
-        const thumbnails = info.videoDetails.thumbnails;
-        const thumb = thumbnails[thumbnails.length - 1].url;
-
-        // Sirf aisi videos filter karna jin mein Video aur Audio dono hon (MP4 format)
-        const formats = ytdl.filterFormats(info.formats, 'videoandaudio');
-        
-        // Ek clean array banana jo frontend ko samajh aaye
-        const links = formats.map(format => {
-            return {
-                quality: format.qualityLabel || 'Standard Quality',
-                link: format.url // Yeh direct Google Video server ka download link hai
-            };
+        // Cobalt API ka Open-Source Endpoint (No API Key Required)
+        const response = await fetch('https://api.cobalt.tools/api/json', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                url: ytUrl,
+                vQuality: "1080" // Highest quality manga rahe hain
+            })
         });
 
-        // Agar combined audio/video na mile, to sirf audio ka link add karna
-        const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-        if (audioFormats.length > 0) {
+        const data = await response.json();
+
+        // Agar Cobalt ki taraf se koi error aaye
+        if (data.status === 'error') {
+            return res.status(500).json({ status: false, message: data.text });
+        }
+
+        // Frontend ke liye array format tayar karna
+        const links = [];
+        
+        if (data.url) {
             links.push({
-                quality: 'Audio Only (MP3/M4A)',
-                link: audioFormats[0].url
+                quality: 'Download Video (MP4)',
+                link: data.url
             });
         }
 
-        // Response wapas frontend ko bhejna
+        // Response wapas apne frontend ko bhejna
         return res.status(200).json({
             status: true,
-            title: title,
-            thumb: thumb,
+            title: "Video Ready to Download", 
+            thumb: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
             link: links
         });
 
     } catch (error) {
-        console.error("YTDL Error:", error);
+        console.error("Extraction Error:", error);
         return res.status(500).json({ 
             status: false, 
-            message: "Extraction failed. YouTube might have blocked the request.", 
+            message: "Failed to extract video. Please try again.", 
             error: error.message 
         });
     }
