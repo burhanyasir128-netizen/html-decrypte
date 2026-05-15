@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-    // 1. CORS Headers
+    // CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
@@ -13,65 +13,52 @@ export default async function handler(req, res) {
         return res.status(400).json({ status: false, message: "Invalid or missing video_id" });
     }
 
-    // 2. Piped API Instances (More stable than Invidious)
-    const instances = [
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.tokhmi.xyz",
-        "https://pipedapi.syncpundit.io"
-    ];
-
+    const ytUrl = `https://www.youtube.com/watch?v=${video_id}`;
     let lastError = "";
 
-    // 3. Auto-Fallback Loop for Piped API
-    for (const instance of instances) {
+    // Hidden Developer APIs (Highly active for Bots)
+    const apis = [
+        `https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(ytUrl)}`,
+        `https://api.ryzendesu.vip/api/downloader/ytmp4?url=${encodeURIComponent(ytUrl)}`
+    ];
+
+    for (const apiUrl of apis) {
         try {
-            const apiUrl = `${instance}/streams/${video_id}`;
-            
-            const response = await fetch(apiUrl, {
-                headers: { 'Accept': 'application/json' },
-                signal: AbortSignal.timeout(6000) // 6 second timeout
-            });
-
-            if (!response.ok) continue;
-
+            const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
             const data = await response.json();
 
-            if (!data.videoStreams || data.videoStreams.length === 0) continue;
+            let downloadUrl = "";
+            let videoTitle = "YouTube Video Ready";
 
-            const links = [];
-            
-            // Piped mein videoOnly: false ka matlab hai ismein Video + Audio dono hain
-            const combinedStreams = data.videoStreams.filter(stream => stream.videoOnly === false && stream.mimeType.includes('mp4'));
-
-            // Agar combined na mile to normal video streams utha lo
-            const streamsToUse = combinedStreams.length > 0 ? combinedStreams : data.videoStreams.filter(s => s.mimeType.includes('mp4'));
-
-            streamsToUse.forEach(stream => {
-                links.push({
-                    quality: stream.quality || 'MP4 Quality',
-                    link: stream.url 
-                });
-            });
-
-            if (links.length > 0) {
-                return res.status(200).json({
-                    status: true,
-                    title: "YouTube Video Ready", 
-                    thumb: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
-                    link: links
-                });
+            // Parsing different API response structures
+            if (data?.data?.dl) {
+                downloadUrl = data.data.dl;
+                videoTitle = data.data.title || videoTitle;
+            } else if (data?.url) {
+                downloadUrl = data.url;
             }
 
+            // Agar link mil gaya to fauran return kar do
+            if (downloadUrl) {
+                return res.status(200).json({
+                    status: true,
+                    title: videoTitle,
+                    thumb: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
+                    link: [
+                        { quality: 'HD Video (MP4)', link: downloadUrl }
+                    ]
+                });
+            }
         } catch (error) {
             lastError = error.message;
-            continue; // Next server try karega
+            continue; // Move to the next API if this one fails
         }
     }
 
-    // 4. Agar tamam free proxies fail ho jayen
+    // Agar tamam APIs block ho chuki hon
     return res.status(500).json({ 
         status: false, 
-        message: "Free proxies are blocked by YouTube. For production use, a paid API is recommended.", 
+        message: "API Blocked. Vercel IPs restricted by YouTube.", 
         error: lastError 
     });
 }
