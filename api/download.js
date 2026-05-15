@@ -1,13 +1,10 @@
 export default async function handler(req, res) {
-    // 1. CORS Headers (Zaroori hain taake frontend server se block na ho)
+    // 1. CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // 2. Handle Preflight Request (Vercel par CORS errors se bachne ke liye)
     if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        return res.status(200).end();
     }
 
     const { video_id } = req.query;
@@ -16,63 +13,65 @@ export default async function handler(req, res) {
         return res.status(400).json({ status: false, message: "Invalid or missing video_id" });
     }
 
-    try {
-        const ytUrl = `https://www.youtube.com/watch?v=${video_id}`;
-        
-        // 3. Cobalt Tools API Call (100% Free, No API Key needed)
-        const response = await fetch('https://api.cobalt.tools/', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                // Yeh headers Cobalt ko block karne se rokte hain
-                'Origin': 'https://cobalt.tools', 
-                'Referer': 'https://cobalt.tools/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            body: JSON.stringify({
-                url: ytUrl,
-                videoQuality: "1080", // Maximum quality fetch karega
-                filenamePattern: "classic"
-            })
-        });
+    // 2. High-Uptime Public Invidious Instances (No API Key Required)
+    const instances = [
+        "https://inv.tux.pizza",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.slipfox.xyz"
+    ];
 
-        // 4. Response Parse Karna
-        const data = await response.json();
+    let lastError = "";
 
-        // Agar Cobalt API ki taraf se koi block ya error aaye
-        if (data.status === 'error' || data.error) {
-            return res.status(500).json({ 
-                status: false, 
-                message: data.text || "Cobalt API blocked the request." 
+    // 3. Auto-Fallback Loop (Agar ek server fail ho to doosra try karega)
+    for (const instance of instances) {
+        try {
+            const apiUrl = `${instance}/api/v1/videos/${video_id}`;
+            
+            const response = await fetch(apiUrl, {
+                headers: { 'Accept': 'application/json' },
+                // Agar 5 seconds tak response na aaye to doosre server par shift ho jao
+                signal: AbortSignal.timeout(5000) 
             });
-        }
 
-        // 5. Frontend ke liye Format Prepare Karna
-        const links = [];
-        
-        // Cobalt API success par directly 'url' return karti hai
-        if (data.url) {
-            links.push({
-                quality: 'MP4 Download (Video + Audio)',
-                link: data.url
+            if (!response.ok) continue; // Server band ho to loop agay barhao
+
+            const data = await response.json();
+
+            // Agar format array mojood nahi hai to agla server try karo
+            if (!data.formatStreams || data.formatStreams.length === 0) continue;
+
+            const links = [];
+            
+            // Sirf MP4 formats ko filter karna
+            data.formatStreams.forEach(stream => {
+                if (stream.container === 'mp4') {
+                    links.push({
+                        quality: stream.qualityLabel || stream.resolution || 'MP4 Quality',
+                        link: stream.url // Yeh direct proxy download link hai
+                    });
+                }
             });
+
+            // Agar links mil gaye hain, to fauran frontend ko bhej do aur loop rok do
+            if (links.length > 0) {
+                return res.status(200).json({
+                    status: true,
+                    title: data.title || "Video Ready", 
+                    thumb: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
+                    link: links
+                });
+            }
+
+        } catch (error) {
+            lastError = error.message;
+            continue; // Network error aane par code crash nahi hoga, agla server try karega
         }
-
-        // 6. Final JSON Response
-        return res.status(200).json({
-            status: true,
-            title: "Video Ready to Download", 
-            thumb: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
-            link: links
-        });
-
-    } catch (error) {
-        console.error("Server API Error:", error);
-        return res.status(500).json({ 
-            status: false, 
-            message: "Vercel Server Error: Extraction Failed.", 
-            error: error.message 
-        });
     }
+
+    // 4. Agar teeno servers fail ho jayen (Worst case scenario)
+    return res.status(500).json({ 
+        status: false, 
+        message: "All extraction nodes are currently busy. Please try again in a few minutes.", 
+        error: lastError 
+    });
 }
