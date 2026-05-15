@@ -97,7 +97,6 @@
             100% { opacity: 0.6; }
         }
 
-        /* Result Section Styling */
         #result-section { 
             display: none; 
             margin-top: 30px; 
@@ -131,7 +130,15 @@
             display: flex; 
             flex-direction: column; 
             gap: 12px; 
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 5px;
         }
+
+        /* Scrollbar Styling for options */
+        .download-options::-webkit-scrollbar { width: 6px; }
+        .download-options::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px; }
+        .download-options::-webkit-scrollbar-thumb { background: #00f2fe; border-radius: 10px; }
 
         .dl-btn {
             background: rgba(255, 255, 255, 0.05); 
@@ -145,6 +152,7 @@
             align-items: center;
             transition: all 0.3s ease;
             font-weight: 500;
+            font-size: 0.95rem;
         }
 
         .dl-btn span:last-child {
@@ -176,19 +184,17 @@
             <input type="text" id="yt-url" placeholder="Paste YouTube Video Link Here...">
             <button onclick="fetchVideoDetails()">Extract</button>
         </div>
-        <div class="loader" id="loader">Extracting Metadata from Vercel API...</div>
+        <div class="loader" id="loader">Extracting Metadata from API...</div>
         
         <div id="result-section">
             <img id="thumb" class="thumbnail" src="" alt="Video Thumbnail">
             <div class="video-title" id="title"></div>
             <div class="download-options" id="options">
-                <!-- Resolutions will be injected here via JavaScript -->
-            </div>
+                </div>
         </div>
     </div>
 
     <script>
-        // Regex to extract exactly 11 characters Video ID from any YT URL
         function extractVideoID(url) {
             var regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
             var match = url.match(regExp);
@@ -204,48 +210,48 @@
                 return;
             }
 
-            // Show Loading State
             document.getElementById('loader').style.display = 'block';
             document.getElementById('result-section').style.display = 'none';
             const optionsDiv = document.getElementById('options');
-            optionsDiv.innerHTML = ''; // Clear previous results
+            optionsDiv.innerHTML = ''; 
 
             try {
-                // Vercel Serverless Function Call
-                const response = await fetch(`/api/download?video_id=${videoId}`);
+                // Cache bypass param add kiya gaya hai
+                const response = await fetch(`/api/download?video_id=${videoId}&t=${Date.now()}`);
                 const data = await response.json();
 
-                // Hide Loading State
                 document.getElementById('loader').style.display = 'none';
 
                 if (data.status === false || data.message) {
-                    alert("Error fetching video details: " + (data.message || "Unknown error"));
+                    alert("Error: " + (data.message || "Unknown error"));
                     return;
                 }
 
-                // Show Result Section
                 document.getElementById('result-section').style.display = 'block';
-                
-                // Populating Data (Modify these object keys according to your specific RapidAPI response)
                 document.getElementById('title').innerText = data.title || "Video Extracted Successfully";
                 
-                // Fallback to high quality YouTube default thumbnail if API doesn't provide one
-                document.getElementById('thumb').src = data.thumb || `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+                // Robust Thumbnail Fallback Logic
+                const imgElement = document.getElementById('thumb');
+                const fallbackImage = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+                
+                imgElement.src = data.thumb || fallbackImage;
+                imgElement.onerror = function() {
+                    this.onerror = null; // Infinite loop se bachne ke liye
+                    this.src = fallbackImage; // Agar RapidAPI ka image toot jaye to YouTube se directly uthaye
+                };
 
-                // Generate Download Links dynamically based on API response
-                // Yahan "data.link" ya "data.formats" apke RapidAPI endpoint ke structure par depend karta hai
-                const videoFormats = data.link || data.formats || data.urls; 
+                // Generate Download Links (Multiple Formats)
+                const videoFormats = data.link; 
 
                 if (videoFormats && videoFormats.length > 0) {
                     let buttonsHTML = '';
-                    
                     videoFormats.forEach(format => {
-                        let quality = format.quality || format.resolution || 'Download Format';
-                        let downloadUrl = format.link || format.url;
+                        let qualityText = format.quality;
+                        let downloadUrl = format.link;
                         
                         buttonsHTML += `
                             <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer" class="dl-btn">
-                                <span>${quality}</span> 
+                                <span>${qualityText}</span> 
                                 <span>Download</span>
                             </a>
                         `;
@@ -257,7 +263,7 @@
 
             } catch (error) {
                 document.getElementById('loader').style.display = 'none';
-                alert('API Connection Failed! Ensure your Vercel API is correctly deployed in the /api folder.');
+                alert('API Connection Failed! Ensure your Vercel API is correctly deployed.');
                 console.error("Fetch Error: ", error);
             }
         }
