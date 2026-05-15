@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premium YT Extractor - Vercel Edition</title>
+    <title>Multi-Tool API Portal</title>
     <style>
         /* Modern Glassmorphism & Cyberpunk-inspired Design */
         body {
             margin: 0; 
-            padding: 0; 
+            padding: 40px 20px; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             color: #fff; 
@@ -16,7 +16,7 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            justify-content: center;
+            gap: 40px; /* Panels ke darmiyan fasla */
         }
         
         .glass-panel {
@@ -26,7 +26,7 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 20px; 
             padding: 40px; 
-            width: 90%; 
+            width: 100%; 
             max-width: 550px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
@@ -36,8 +36,13 @@
             color: #00f2fe; 
             text-transform: uppercase; 
             letter-spacing: 2px; 
-            font-size: 1.8rem;
+            font-size: 1.6rem;
+            margin-top: 0;
             margin-bottom: 30px;
+        }
+
+        .wa-title {
+            color: #25D366; /* WhatsApp Green Color */
         }
 
         .input-group { 
@@ -76,20 +81,27 @@
             transition: 0.3s;
         }
 
+        .wa-btn {
+            background: linear-gradient(45deg, #128C7E 0%, #25D366 100%);
+            color: #fff;
+        }
+
         button:hover { 
-            box-shadow: 0 0 20px rgba(0, 242, 254, 0.5); 
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
         .loader { 
             display: none; 
             text-align: center; 
             margin-top: 15px; 
-            color: #00f2fe; 
             font-weight: 500;
             letter-spacing: 1px;
             animation: pulse 1.5s infinite;
         }
+
+        .yt-loader { color: #00f2fe; }
+        .wa-loader { color: #25D366; }
 
         @keyframes pulse {
             0% { opacity: 0.6; }
@@ -97,7 +109,8 @@
             100% { opacity: 0.6; }
         }
 
-        #result-section { 
+        /* Result Sections */
+        .result-section { 
             display: none; 
             margin-top: 30px; 
             text-align: center; 
@@ -135,7 +148,6 @@
             padding-right: 5px;
         }
 
-        /* Scrollbar Styling for options */
         .download-options::-webkit-scrollbar { width: 6px; }
         .download-options::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px; }
         .download-options::-webkit-scrollbar-thumb { background: #00f2fe; border-radius: 10px; }
@@ -151,7 +163,6 @@
             justify-content: space-between;
             align-items: center;
             transition: all 0.3s ease;
-            font-weight: 500;
             font-size: 0.95rem;
         }
 
@@ -162,17 +173,21 @@
             border-radius: 5px;
             font-size: 0.85rem;
             font-weight: bold;
-            transition: 0.3s;
         }
 
-        .dl-btn:hover { 
-            background: rgba(255, 255, 255, 0.15); 
-            border-color: #00f2fe; 
-        }
+        .dl-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: #00f2fe; }
 
-        .dl-btn:hover span:last-child {
-            background: #fff;
-            box-shadow: 0 0 10px #00f2fe;
+        /* WhatsApp JSON Display */
+        .json-display {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #25D366;
+            overflow-x: auto;
+            border: 1px solid rgba(37, 211, 102, 0.2);
         }
     </style>
 </head>
@@ -184,17 +199,31 @@
             <input type="text" id="yt-url" placeholder="Paste YouTube Video Link Here...">
             <button onclick="fetchVideoDetails()">Extract</button>
         </div>
-        <div class="loader" id="loader">Extracting Metadata from API...</div>
+        <div class="loader yt-loader" id="loader">Extracting Metadata...</div>
         
-        <div id="result-section">
+        <div class="result-section" id="result-section">
             <img id="thumb" class="thumbnail" src="" alt="Video Thumbnail">
             <div class="video-title" id="title"></div>
-            <div class="download-options" id="options">
+            <div class="download-options" id="options"></div>
+        </div>
+    </div>
+
+    <div class="glass-panel">
+        <h1 class="wa-title">WA Business Checker</h1>
+        <div class="input-group">
+            <input type="number" id="wa-phone" placeholder="Enter Phone (e.g., 13022612667)">
+            <button class="wa-btn" onclick="checkWhatsApp()">Check</button>
+        </div>
+        <div class="loader wa-loader" id="wa-loader">Checking database...</div>
+        
+        <div class="result-section" id="wa-result-section">
+            <div class="json-display" id="wa-data">
                 </div>
         </div>
     </div>
 
     <script>
+        // --- YouTube Logic ---
         function extractVideoID(url) {
             var regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
             var match = url.match(regExp);
@@ -205,66 +234,64 @@
             const urlInput = document.getElementById('yt-url').value;
             const videoId = extractVideoID(urlInput);
             
-            if (!videoId) {
-                alert('Invalid YouTube URL! Please enter a correct link.');
-                return;
-            }
+            if (!videoId) { alert('Invalid YouTube URL!'); return; }
 
             document.getElementById('loader').style.display = 'block';
             document.getElementById('result-section').style.display = 'none';
-            const optionsDiv = document.getElementById('options');
-            optionsDiv.innerHTML = ''; 
+            document.getElementById('options').innerHTML = ''; 
 
             try {
-                // Cache bypass param add kiya gaya hai
                 const response = await fetch(`/api/download?video_id=${videoId}&t=${Date.now()}`);
                 const data = await response.json();
-
                 document.getElementById('loader').style.display = 'none';
 
-                if (data.status === false || data.message) {
-                    alert("Error: " + (data.message || "Unknown error"));
-                    return;
-                }
+                if (data.status === false) { alert("Error: " + data.message); return; }
 
                 document.getElementById('result-section').style.display = 'block';
-                document.getElementById('title').innerText = data.title || "Video Extracted Successfully";
+                document.getElementById('title').innerText = data.title;
                 
-                // Robust Thumbnail Fallback Logic
                 const imgElement = document.getElementById('thumb');
                 const fallbackImage = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-                
                 imgElement.src = data.thumb || fallbackImage;
-                imgElement.onerror = function() {
-                    this.onerror = null; // Infinite loop se bachne ke liye
-                    this.src = fallbackImage; // Agar RapidAPI ka image toot jaye to YouTube se directly uthaye
-                };
+                imgElement.onerror = function() { this.onerror = null; this.src = fallbackImage; };
 
-                // Generate Download Links (Multiple Formats)
-                const videoFormats = data.link; 
-
-                if (videoFormats && videoFormats.length > 0) {
+                if (data.link && data.link.length > 0) {
                     let buttonsHTML = '';
-                    videoFormats.forEach(format => {
-                        let qualityText = format.quality;
-                        let downloadUrl = format.link;
-                        
-                        buttonsHTML += `
-                            <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer" class="dl-btn">
-                                <span>${qualityText}</span> 
-                                <span>Download</span>
-                            </a>
-                        `;
+                    data.link.forEach(format => {
+                        buttonsHTML += `<a href="${format.link}" target="_blank" class="dl-btn"><span>${format.quality}</span> <span>Download</span></a>`;
                     });
-                    optionsDiv.innerHTML = buttonsHTML;
-                } else {
-                    optionsDiv.innerHTML = '<p style="color: #ff4b4b;">No download links available for this video.</p>';
+                    document.getElementById('options').innerHTML = buttonsHTML;
                 }
 
             } catch (error) {
                 document.getElementById('loader').style.display = 'none';
-                alert('API Connection Failed! Ensure your Vercel API is correctly deployed.');
-                console.error("Fetch Error: ", error);
+                alert('API Connection Failed!');
+            }
+        }
+
+        // --- WhatsApp Logic ---
+        async function checkWhatsApp() {
+            const phoneInput = document.getElementById('wa-phone').value.trim();
+            if (!phoneInput) { alert('Please enter a valid phone number!'); return; }
+
+            document.getElementById('wa-loader').style.display = 'block';
+            document.getElementById('wa-result-section').style.display = 'none';
+            document.getElementById('wa-data').innerHTML = '';
+
+            try {
+                // Nayi Vercel API ko call kar rahe hain
+                const response = await fetch(`/api/whatsapp?phone=${phoneInput}&t=${Date.now()}`);
+                const data = await response.json();
+                
+                document.getElementById('wa-loader').style.display = 'none';
+                document.getElementById('wa-result-section').style.display = 'block';
+
+                // API ka response format neatly print karwaya hai
+                document.getElementById('wa-data').innerHTML = `<pre>${JSON.stringify(data, null, 4)}</pre>`;
+
+            } catch (error) {
+                document.getElementById('wa-loader').style.display = 'none';
+                alert('WhatsApp API Connection Failed!');
             }
         }
     </script>
